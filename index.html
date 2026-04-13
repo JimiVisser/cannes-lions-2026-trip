@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Cannes Lions 2026 Road Trip Map</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=Inter:wght@300;400;500;600&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { font-family: 'Inter', sans-serif; background: #f5f0e8; }
+  #map { width: 100%; height: 100vh; }
+
+  .header-bar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 1000;
+    background: linear-gradient(135deg, #2c2520 0%, #4a3828 100%);
+    color: white; padding: 10px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.3);
+  }
+  .header-bar h1 { font-family: 'Playfair Display', serif; font-size: 1.3em; font-weight: 600; }
+  .header-bar .route-text { font-size: 0.78em; opacity: 0.7; letter-spacing: 0.04em; }
+
+  .preset-btns { display: flex; gap: 6px; }
+  .preset-btn {
+    padding: 5px 14px; font-size: 0.75em; font-weight: 600; letter-spacing: 0.03em;
+    border: 1px solid rgba(255,255,255,0.25); border-radius: 16px;
+    cursor: pointer; background: transparent; color: rgba(255,255,255,0.7);
+    transition: all 0.2s; font-family: 'Inter', sans-serif;
+  }
+  .preset-btn:hover { background: rgba(255,255,255,0.15); color: white; }
+  .preset-btn.budget-hl { background: #4a8c3f; color: white; border-color: #4a8c3f; }
+  .preset-btn.splurge-hl { background: #b8860b; color: white; border-color: #b8860b; }
+
+  .sidebar {
+    position: fixed; top: 50px; left: 0; bottom: 0; width: 380px; z-index: 999;
+    background: #fffdf9; overflow-y: auto;
+    box-shadow: 2px 0 12px rgba(0,0,0,0.1); transition: transform 0.3s;
+  }
+  .sidebar.collapsed { transform: translateX(-380px); }
+  .toggle-btn {
+    position: fixed; top: 62px; left: 380px; z-index: 1000;
+    background: #2c2520; color: white; border: none;
+    padding: 8px 12px; border-radius: 0 6px 6px 0;
+    cursor: pointer; font-size: 0.8em; transition: left 0.3s;
+  }
+  .toggle-btn.collapsed { left: 0; }
+
+  .phase-label {
+    font-family: 'Playfair Display', serif; font-size: 0.75em; font-weight: 600;
+    letter-spacing: 0.1em; text-transform: uppercase; color: #7a6e63;
+    text-align: center; padding: 14px 16px 6px;
+  }
+
+  .stop-section { border-bottom: 1px solid #e8ddd0; }
+  .stop-header {
+    padding: 12px 16px; cursor: pointer; transition: background 0.15s;
+    display: flex; align-items: flex-start; gap: 10px;
+  }
+  .stop-header:hover { background: #f5f0e8; }
+  .stop-header.active { background: #e8ddd0; border-left: 4px solid #b8860b; }
+  .stop-header .day { font-size: 0.7em; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: #b8860b; margin-bottom: 2px; }
+  .stop-header .name { font-family: 'Playfair Display', serif; font-size: 1.02em; font-weight: 600; color: #2c2520; }
+  .stop-header .drive-tag {
+    display: inline-block; background: #e8ddd0; font-size: 0.72em; font-weight: 500;
+    color: #7a6e63; padding: 2px 8px; border-radius: 10px; margin-top: 4px;
+  }
+  .stop-header .header-left { flex: 1; }
+
+  .item-list { padding: 0 16px 12px; }
+  .item-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 10px; margin: 3px 0; border-radius: 6px;
+    background: #f9f6f0; transition: background 0.15s;
+  }
+  .item-row .item-info { flex: 1; }
+  .item-row .item-cat {
+    font-size: 0.62em; font-weight: 700; text-transform: uppercase;
+    letter-spacing: 0.06em; margin-bottom: 1px;
+  }
+  .item-cat.lodge { color: #4a6741; }
+  .item-cat.dine { color: #8b4513; }
+  .item-cat.act { color: #2e5090; }
+  .item-row .item-name { font-size: 0.82em; font-weight: 500; color: #2c2520; }
+  .item-row .item-price { font-size: 0.75em; color: #7a6e63; }
+
+  .item-toggle {
+    display: flex; border-radius: 12px; overflow: hidden;
+    border: 1px solid #ddd; flex-shrink: 0; margin-left: 8px;
+  }
+  .item-toggle button {
+    padding: 3px 9px; font-size: 0.65em; font-weight: 600;
+    border: none; cursor: pointer; background: #f0ede6; color: #999;
+    transition: all 0.15s; font-family: 'Inter', sans-serif;
+  }
+  .item-toggle button.sel-budget { background: #4a8c3f; color: white; }
+  .item-toggle button.sel-splurge { background: #b8860b; color: white; }
+  .item-row.locked { opacity: 0.7; }
+  .item-row.locked .item-toggle { display: none; }
+  .locked-tag {
+    font-size: 0.6em; font-weight: 600; background: #e8ddd0; color: #7a6e63;
+    padding: 2px 6px; border-radius: 3px; margin-left: 8px; flex-shrink: 0;
+  }
+  .same-tag {
+    font-size: 0.6em; font-weight: 500; background: #f0ede6; color: #aaa;
+    padding: 2px 6px; border-radius: 3px; margin-left: 8px; flex-shrink: 0;
+  }
+
+  .budget-panel {
+    background: linear-gradient(135deg, #2c2520, #4a3828);
+    color: white; padding: 18px; margin: 8px 12px 16px; border-radius: 10px;
+  }
+  .budget-panel h3 { font-family: 'Playfair Display', serif; font-size: 0.95em; margin-bottom: 10px; color: #daa520; }
+  .budget-row { display: flex; justify-content: space-between; font-size: 0.76em; padding: 2px 0; border-bottom: 1px solid rgba(255,255,255,0.06); }
+  .budget-row .label { opacity: 0.7; max-width: 68%; }
+  .budget-row .amount { font-weight: 600; text-align: right; }
+  .budget-row.cat-row { border-bottom: none; padding-top: 7px; }
+  .budget-row.cat-row .label { opacity: 1; color: #daa520; font-weight: 600; font-size: 0.7em; text-transform: uppercase; letter-spacing: 0.05em; }
+  .budget-row.total-row {
+    border-top: 1px solid rgba(255,255,255,0.25); border-bottom: none;
+    margin-top: 8px; padding-top: 10px; font-size: 0.92em;
+  }
+  .budget-row.total-row .label { opacity: 1; color: #daa520; font-weight: 700; }
+  .budget-row.total-row .amount { color: #daa520; }
+  .budget-row .tag-b { background: #4a8c3f; color: white; font-size: 0.7em; padding: 1px 5px; border-radius: 3px; margin-left: 4px; font-weight: 600; }
+  .budget-row .tag-s { background: #b8860b; color: white; font-size: 0.7em; padding: 1px 5px; border-radius: 3px; margin-left: 4px; font-weight: 600; }
+  .budget-note { font-size: 0.68em; opacity: 0.5; margin-top: 8px; line-height: 1.4; }
+
+  .leaflet-popup-content-wrapper { border-radius: 10px; box-shadow: 0 4px 20px rgba(0,0,0,0.15); }
+  .leaflet-popup-content { margin: 14px 16px; font-family: 'Inter', sans-serif; line-height: 1.5; max-width: 320px; }
+  .popup-title { font-family: 'Playfair Display', serif; font-size: 1.1em; font-weight: 600; color: #2c2520; margin-bottom: 4px; }
+  .popup-day { font-size: 0.75em; font-weight: 600; color: #b8860b; text-transform: uppercase; letter-spacing: 0.06em; }
+  .popup-body { font-size: 0.85em; color: #7a6e63; margin-top: 6px; }
+  .popup-body strong { color: #2c2520; }
+  .popup-section { margin-top: 8px; padding-top: 8px; border-top: 1px solid #e8ddd0; }
+  .popup-section .sec-title { font-size: 0.72em; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 3px; }
+  .popup-section .sec-title.lodge { color: #4a6741; }
+  .popup-section .sec-title.dine { color: #8b4513; }
+  .popup-section .sec-title.act { color: #2e5090; }
+  .popup-link {
+    display: inline-block; background: #2c2520; color: white !important; text-decoration: none;
+    font-size: 0.78em; font-weight: 500; padding: 4px 12px; border-radius: 4px;
+    margin-top: 5px; margin-right: 4px; letter-spacing: 0.02em; transition: background 0.15s;
+  }
+  .popup-link:hover { background: #4a3828; }
+
+  @media (max-width: 768px) {
+    .sidebar { width: 300px; }
+    .toggle-btn { left: 300px; }
+    .toggle-btn.collapsed { left: 0; }
+  }
+
+  /* COMMENTS */
+  .comments-panel {
+    background: #fffdf9; margin: 8px 12px 16px; border-radius: 10px;
+    border: 1px solid #e8ddd0; overflow: hidden;
+  }
+  .comments-panel h3 {
+    font-family: 'Playfair Display', serif; font-size: 0.95em; font-weight: 600;
+    color: #2c2520; padding: 14px 16px 8px; margin: 0;
+    border-bottom: 1px solid #e8ddd0;
+  }
+  .comments-panel h3 span {
+    font-size: 0.7em; font-weight: 400; color: #7a6e63; margin-left: 6px;
+  }
+  .comment-stop-section { border-bottom: 1px solid #e8ddd0; }
+  .comment-stop-header {
+    padding: 10px 16px; cursor: pointer; display: flex; justify-content: space-between;
+    align-items: center; font-weight: 600; font-size: 0.85em; color: #2c2520;
+    transition: background 0.15s;
+  }
+  .comment-stop-header:hover { background: #f5f0e8; }
+  .comment-stop-header .count {
+    background: #b8860b; color: white; font-size: 0.7em; padding: 2px 7px;
+    border-radius: 10px; min-width: 20px; text-align: center;
+  }
+  .comment-stop-header .count.zero { background: #ddd; color: #999; }
+  .comment-body { display: none; padding: 0 16px 12px; }
+  .comment-body.open { display: block; }
+  .comment-thread { margin-bottom: 8px; }
+  .comment-bubble {
+    padding: 8px 12px; border-radius: 8px; margin-bottom: 4px;
+    font-size: 0.82em; line-height: 1.45;
+  }
+  .comment-bubble.jimi { background: #e0e8f5; color: #2c3e50; }
+  .comment-bubble.denise { background: #e8f0e6; color: #2c3e28; }
+  .comment-bubble .author {
+    font-weight: 700; font-size: 0.78em; text-transform: uppercase;
+    letter-spacing: 0.04em; margin-bottom: 2px;
+  }
+  .comment-bubble.jimi .author { color: #2e5090; }
+  .comment-bubble.denise .author { color: #4a6741; }
+  .comment-bubble .time { font-size: 0.7em; color: #999; margin-top: 3px; }
+  .comment-form { display: flex; gap: 6px; margin-top: 6px; }
+  .comment-form input[type=text] {
+    flex: 1; padding: 7px 10px; border: 1px solid #ddd; border-radius: 6px;
+    font-size: 0.82em; font-family: 'Inter', sans-serif;
+  }
+  .comment-form input[type=text]:focus { outline: none; border-color: #b8860b; }
+  .comment-form button {
+    padding: 7px 14px; background: #2c2520; color: white; border: none;
+    border-radius: 6px; font-size: 0.78em; font-weight: 600; cursor: pointer;
+    font-family: 'Inter', sans-serif; transition: background 0.15s;
+  }
+  .comment-form button:hover { background: #4a3828; }
+  .user-select {
+    display: flex; gap: 4px; margin-bottom: 8px;
+  }
+  .user-btn {
+    padding: 4px 12px; border-radius: 12px; font-size: 0.72em; font-weight: 600;
+    cursor: pointer; border: 1px solid #ddd; background: #f9f6f0; color: #999;
+    font-family: 'Inter', sans-serif; transition: all 0.15s;
+  }
+  .user-btn.active-jimi { background: #2e5090; color: white; border-color: #2e5090; }
+  .user-btn.active-denise { background: #4a6741; color: white; border-color: #4a6741; }
+
+</style>
+</head>
+<body>
+
+<div class="header-bar">
+  <h1>Cannes Lions 2026 Road Trip</h1>
+  <div class="preset-btns">
+    <button class="preset-btn budget-hl" onclick="setAllMode('budget')">All Budget</button>
+    <button class="preset-btn" onclick="setAllMode('splurge')">All Splurge</button>
+  </div>
+  <span class="route-text">Amsterdam &amp; Back &bull; 19 to 28 June &bull; ~2,870 km</span>
+</div>
+
+<button class="toggle-btn" id="toggleBtn" onclick="toggleSidebar()">&#9664;</button>
+<div class="sidebar" id="sidebar"></div>
+<div id="map"></div>
+
+<script>
+// Each choosable item with budget and splurge variants
+const items = [
+  // REIMS
+  { id: 'reims-lodge', stop: 'reims', cat: 'lodge', locked: true,
+    budget: { name: 'Chateau de Sacy (Locked)', price: '~\u20AC165 to 300/room', costLow: 330, costHigh: 600 },
+    splurge: { name: 'Chateau de Sacy (Locked)', price: '~\u20AC165 to 300/room', costLow: 330, costHigh: 600 }
+  },
+  { id: 'reims-dinner', stop: 'reims', cat: 'dine',
+    budget: { name: 'Au Petit Comptoir', price: '\u20AC25 to 40 pp', costLow: 50, costHigh: 80,
+      popup: '<strong>Au Petit Comptoir, Reims</strong><br>Bistronomic French, seasonal menus, charming cellar.<br>&euro;25 to 40 pp &bull; 03 26 40 58 58<br><a class="popup-link" href="https://www.au-petit-comptoir.fr/" target="_blank">Website</a>' },
+    splurge: { name: 'Chateau de Sacy Restaurant', price: '~\u20AC75 pp', costLow: 150, costHigh: 150,
+      popup: '<strong>Chateau de Sacy Restaurant</strong><br>Chef Guillaume Diether. Michelin recognised.<br>7:00 PM to 9:30 PM &bull; 03 26 07 60 38<br><a class="popup-link" href="https://www.chateaudesacy-reims.fr/en/restaurant-bar/" target="_blank">Restaurant Details</a>' }
+  },
+  { id: 'reims-tasting', stop: 'reims', cat: 'act',
+    budget: { name: 'Small Grower Tasting', price: 'Free to \u20AC20 pp', costLow: 0, costHigh: 40,
+      popup: '<strong>Small Grower Tasting, Champagne Villages</strong><br>Visit an independent vigneronne near Sacy. Free to &euro;20 pp (often waived with bottle purchase).<br><a class="popup-link" href="https://www.champagne-booking.com/en/" target="_blank">Find a Grower</a>' },
+    splurge: { name: 'Roger Coulon Tasting', price: '\u20AC35 to 56 pp', costLow: 70, costHigh: 112,
+      popup: '<strong>Champagne Roger Coulon, Vrigny</strong><br>Artisanal family house. Discovery tasting 10:30 AM.<br>&euro;35 to 56 pp<br><a class="popup-link" href="https://www.champagne-coulon.com/en" target="_blank">Book Tasting</a>' }
+  },
+  // LYON
+  { id: 'lyon-lodge', stop: 'lyon', cat: 'lodge', locked: true,
+    budget: { name: 'Fourviere Hotel (Locked)', price: '~\u20AC125 to 164/room/night', costLow: 500, costHigh: 656 },
+    splurge: { name: 'Fourviere Hotel (Locked)', price: '~\u20AC125 to 164/room/night', costLow: 500, costHigh: 656 }
+  },
+  { id: 'lyon-sat-lunch', stop: 'lyon', cat: 'dine', same: true,
+    budget: { name: 'Marie T (lunch)', price: '\u20AC15 to 24 pp', costLow: 30, costHigh: 48,
+      popup: '<strong>Marie T, Croix Rousse</strong><br>Seasonal menus. &euro;15 to 24 pp' },
+    splurge: { name: 'Marie T (lunch)', price: '\u20AC15 to 24 pp', costLow: 30, costHigh: 48,
+      popup: '<strong>Marie T, Croix Rousse</strong><br>Seasonal menus. &euro;15 to 24 pp' }
+  },
+  { id: 'lyon-sat-dinner', stop: 'lyon', cat: 'dine', same: true,
+    budget: { name: 'Les Ventres Jaunes (dinner)', price: '~\u20AC30 to 40 pp', costLow: 60, costHigh: 80,
+      popup: '<strong>Les Ventres Jaunes, Vieux Lyon</strong><br>Classic bouchon. ~&euro;30 to 40 pp' },
+    splurge: { name: 'Les Ventres Jaunes (dinner)', price: '~\u20AC30 to 40 pp', costLow: 60, costHigh: 80,
+      popup: '<strong>Les Ventres Jaunes, Vieux Lyon</strong><br>Classic bouchon. ~&euro;30 to 40 pp' }
+  },
+  { id: 'lyon-sun-lunch', stop: 'lyon', cat: 'dine',
+    budget: { name: 'Bouchon Tupin (lunch)', price: '\u20AC18 to 26 pp', costLow: 36, costHigh: 52,
+      popup: '<strong>Bouchon Tupin</strong><br>Market driven Lyonnaise cuisine. &euro;18 to 26 pp<br><a class="popup-link" href="https://www.bouchontupin.com/" target="_blank">Website</a>' },
+    splurge: { name: 'Bouchon Les Lyonnais (lunch)', price: '\u20AC33 to 39 pp', costLow: 66, costHigh: 78,
+      popup: '<strong>Bouchon Les Lyonnais</strong><br>&euro;33 to 39 pp &bull; +33 4 78 37 64 82<br><a class="popup-link" href="https://bouchon-les-lyonnais.com/en/booking" target="_blank">Book Lunch</a>' }
+  },
+  { id: 'lyon-sun-dinner', stop: 'lyon', cat: 'dine',
+    budget: { name: 'Cafe du Jura (dinner)', price: '\u20AC20 to 30 pp', costLow: 40, costHigh: 60,
+      popup: '<strong>Cafe du Jura</strong><br>Art Deco bouchon, Lyonnaise classics. &euro;20 to 30 pp<br>25 Rue Tupin &bull; +33 4 78 42 20 57' },
+    splurge: { name: 'Cafe Comptoir Abel (dinner)', price: '\u20AC32 to 49 pp', costLow: 64, costHigh: 98,
+      popup: '<strong>Cafe Comptoir Abel</strong><br>&euro;32 to 49 pp<br><a class="popup-link" href="https://en.visiterlyon.com/taste-the-finest/restaurants-and-gastronomy/label-bouchons-lyonnais/cafe-comptoir-abel" target="_blank">Details</a>' }
+  },
+  { id: 'lyon-tour', stop: 'lyon', cat: 'act',
+    budget: { name: 'Self Guided Traboules Walk', price: 'Free', costLow: 0, costHigh: 0,
+      popup: '<strong>Self Guided Traboules Walk</strong> (free, 1.5 to 2 h)<br>80+ publicly accessible passageways. Look for "P" markers on doors.<br><a class="popup-link" href="https://en.visiterlyon.com/discover/heritage-unesco/lyon-s-traboules-and-courtyards" target="_blank">Free Guide</a>' },
+    splurge: { name: 'Private Traboules Tour', price: '\u20AC50 to 150', costLow: 50, costHigh: 150,
+      popup: '<strong>Traboules Private Walking Tour</strong> (1 to 2 h, expert guide)<br><a class="popup-link" href="https://www.getyourguide.com/lyon-l295/lyon-private-walking-tour-of-traboules-in-the-old-town-t603099/" target="_blank">Book Private Tour</a><a class="popup-link" href="https://www.toursbylocals.com/vieux-lyon-private-tour" target="_blank">Tours By Locals</a>' }
+  },
+  // VALENCE
+  { id: 'valence-lunch', stop: 'valence', cat: 'dine', same: true,
+    budget: { name: 'Le Petit Naples (lunch)', price: '\u20AC8 to 18 pp', costLow: 16, costHigh: 36,
+      popup: '<strong>Le Petit Naples</strong><br>Hidden gem pizzeria. Open Mondays (rare!).<br>12:00 to 2:00 PM &bull; &euro;8 to 18<br><a class="popup-link" href="https://www.tripadvisor.com/Restaurant_Review-g187272-d969649-Reviews-Le_Petit_Naples-Valence_Drome_Auvergne_Rhone_Alpes.html" target="_blank">TripAdvisor</a><a class="popup-link" href="https://maps.google.com/?q=Le+Petit+Naples+Valence+France" target="_blank">Directions</a>' },
+    splurge: { name: 'Le Petit Naples (lunch)', price: '\u20AC8 to 18 pp', costLow: 16, costHigh: 36,
+      popup: '<strong>Le Petit Naples</strong><br>Hidden gem pizzeria. Open Mondays (rare!).<br>12:00 to 2:00 PM &bull; &euro;8 to 18<br><a class="popup-link" href="https://www.tripadvisor.com/Restaurant_Review-g187272-d969649-Reviews-Le_Petit_Naples-Valence_Drome_Auvergne_Rhone_Alpes.html" target="_blank">TripAdvisor</a><a class="popup-link" href="https://maps.google.com/?q=Le+Petit+Naples+Valence+France" target="_blank">Directions</a>' }
+  },
+  // AIX
+  { id: 'aix-lodge', stop: 'aix', cat: 'lodge',
+    budget: { name: 'Domaine de Carraire', price: '~\u20AC85/room', costLow: 170, costHigh: 170,
+      popup: '<strong>Domaine de Carraire</strong><br>Adults only mas with pool and garden. ~&euro;85/room. Free parking.<br><a class="popup-link" href="https://www.booking.com/hotel/fr/domaine-de-carraire-chez-alphonse.html" target="_blank">Book Carraire</a>' },
+    splurge: { name: 'Chateau de la Gaude', price: '~\u20AC260/room', costLow: 520, costHigh: 520,
+      popup: '<strong>Chateau de la Gaude</strong> &#9733; 5 Star Relais Chateaux<br>18th century bastide. Michelin starred restaurant, spa, infinity pool.<br>~&euro;260/room. Free parking.<br><a class="popup-link" href="https://www.relaischateaux.com/us/hotel/chateau-de-la-gaude/" target="_blank">Relais Chateaux</a>' }
+  },
+  { id: 'aix-dinner', stop: 'aix', cat: 'dine',
+    budget: { name: 'Chez Feraud (dinner)', price: '\u20AC25 to 30 pp', costLow: 50, costHigh: 60,
+      popup: '<strong>Chez Feraud</strong><br>Family run Provencal. Soupe au pistou, daube de boeuf.<br>&euro;25 to 30 pp &bull; +33 4 42 63 07 27<br>8 Rue du Puits Juif' },
+    splurge: { name: 'Le Petit Verdot (dinner)', price: '\u20AC35 to 60 pp', costLow: 70, costHigh: 120,
+      popup: '<strong>Le Petit Verdot</strong><br>Wine bar bistro, 100+ wines. &euro;35 to 60 pp.<br>7 PM to midnight &bull; +33 4 42 27 30 12<br><a class="popup-link" href="https://www.lepetitverdot.com/?lang=en" target="_blank">Website</a>' }
+  },
+  { id: 'aix-lunch', stop: 'aix', cat: 'dine',
+    budget: { name: 'Le Four Aixois (lunch)', price: '\u20AC12 to 20 pp', costLow: 24, costHigh: 40,
+      popup: '<strong>Le Four Aixois</strong><br>Artisanal Italian pizzeria with terrace. &euro;12 to 20 pp.<br>4 Rue Boulegon<br><a class="popup-link" href="https://www.thefork.com/restaurant/le-four-aixois-r542989" target="_blank">TheFork</a>' },
+    splurge: { name: 'Vintrepide (lunch)', price: '\u20AC40 to 70 pp', costLow: 80, costHigh: 140,
+      popup: '<strong>Vintrepide</strong> &mdash; Michelin recognised<br>&euro;40 to 70 pp &bull; 09 83 88 96 59<br><a class="popup-link" href="https://www.vintrepide.com/" target="_blank">Website</a><a class="popup-link" href="https://guide.michelin.com/us/en/provence-alpes-cote-d-azur/aix-en-provence/restaurant/le-vintrepide" target="_blank">Michelin Guide</a>' }
+  },
+  { id: 'aix-evening', stop: 'aix', cat: 'act', same: true,
+    budget: { name: 'Les Instants d\'Ete', price: 'Free', costLow: 0, costHigh: 0,
+      popup: '<strong>Les Instants d\'Ete</strong> &mdash; Open air concerts, free events<br><a class="popup-link" href="https://www.aixenprovencetourism.com/agenda-des-evenements/festivals-ete/" target="_blank">Festival Programme</a>' },
+    splurge: { name: 'Les Instants d\'Ete', price: 'Free', costLow: 0, costHigh: 0,
+      popup: '<strong>Les Instants d\'Ete</strong> &mdash; Open air concerts, free events<br><a class="popup-link" href="https://www.aixenprovencetourism.com/agenda-des-evenements/festivals-ete/" target="_blank">Festival Programme</a>' }
+  },
+  // BEAUNE
+  { id: 'beaune-lodge', stop: 'beaune', cat: 'lodge',
+    budget: { name: 'Le Central Boutique Hotel', price: '\u20AC72 to 100/room', costLow: 144, costHigh: 200,
+      popup: '<strong>Le Central Boutique Hotel</strong><br>16th century, opposite Hospices de Beaune. Renovated 2018.<br>&euro;72 to 100/room. Parking available.<br><a class="popup-link" href="https://www.booking.com/hotel/fr/le-central-beaune.html" target="_blank">Book on Booking.com</a>' },
+    splurge: { name: 'Hotel Les Nomades', price: '\u20AC150 to 255/room', costLow: 300, costHigh: 510,
+      popup: '<strong>Hotel Les Nomades</strong> &#9733; 4 Star<br>Spa, pools, wine region charm. &euro;150 to 255/room. Free gated parking.<br><a class="popup-link" href="https://www.booking.com/hotel/fr/les-nomades-beaune.html" target="_blank">Booking.com</a><a class="popup-link" href="https://hotel-beaune-les-nomades.com/en/" target="_blank">Official Site</a>' }
+  },
+  { id: 'beaune-tasting', stop: 'beaune', cat: 'act',
+    budget: { name: 'Marche aux Vins Tasting', price: '~\u20AC25 pp', costLow: 50, costHigh: 50,
+      popup: '<strong>Marche aux Vins Discovery Tasting</strong><br>Self guided cellar tour through converted church. 5 Burgundy wines.<br>~&euro;25 pp<br><a class="popup-link" href="https://marcheauxvins.com/en/tours-and-tastings/" target="_blank">Book Tasting</a>' },
+    splurge: { name: 'Caves Patriarche Tour', price: '~\u20AC71 pp', costLow: 142, costHigh: 142,
+      popup: '<strong>Caves Patriarche Cellar Tour</strong><br>5 km tunnels (est. 1780). ~6 wine tasting. ~&euro;71 pp.<br><a class="popup-link" href="https://www.winalist.com/cities/beaune" target="_blank">Book via Winalist</a>' }
+  },
+  { id: 'beaune-dinner', stop: 'beaune', cat: 'dine',
+    budget: { name: 'Bistro des Cocottes (dinner)', price: '\u20AC20 to 25 pp', costLow: 40, costHigh: 50,
+      popup: '<strong>Le Bistro des Cocottes</strong><br>Authentic French bistro, classic cuisine.<br>&euro;20 to 25 pp &bull; +33 3 80 22 17 82<br>3 Place Madeleine, Beaune<br><a class="popup-link" href="https://www.bistrodescocottes.fr/" target="_blank">Website</a>' },
+    splurge: { name: 'Le Benaton (Michelin Star)', price: '\u20AC95 to 120 pp', costLow: 190, costHigh: 240,
+      popup: '<strong>Le Benaton</strong> &#9733; Michelin Star<br>Japanese trained chef Bruno Monnoir. &euro;95 to 120 pp.<br>7:15 to 9:30 PM &bull; +33 3 80 22 00 26<br><em>Book immediately &mdash; smallest capacity on the trip.</em><br><a class="popup-link" href="https://guide.michelin.com/us/en/bourgogne-franche-comte/beaune/restaurant/le-benaton" target="_blank">Michelin Guide</a>' }
+  },
+  // TRANSPORT (fixed)
+  { id: 'fuel', stop: 'transport', cat: 'transport', same: true,
+    budget: { name: 'Fuel (~2,870 km)', price: '~\u20AC300 to 380', costLow: 300, costHigh: 380 },
+    splurge: { name: 'Fuel (~2,870 km)', price: '~\u20AC300 to 380', costLow: 300, costHigh: 380 }
+  },
+  { id: 'tolls', stop: 'transport', cat: 'transport', same: true,
+    budget: { name: 'Tolls (autoroutes)', price: '~\u20AC150 to 200', costLow: 150, costHigh: 200 },
+    splurge: { name: 'Tolls (autoroutes)', price: '~\u20AC150 to 200', costLow: 150, costHigh: 200 }
+  }
+];
+
+// State: per item choice
+const choices = {};
+items.forEach(it => { choices[it.id] = 'budget'; });
+
+// Stop metadata
+const stopMeta = [
+  { id: 'amsterdam-start', name: 'Amsterdam', day: 'Fri 19 Jun', lat: 52.3676, lng: 4.9041, phase: 'south', type: 'start', drive: '4 h 30 min to Reims (490 km)',
+    fixedPopup: '<div class="popup-day">Fri 19 June</div><div class="popup-title">Amsterdam</div><div class="popup-body">Departure point. Leave Friday afternoon heading south via E19 / A26.</div>' },
+  { id: 'reims', name: 'Reims (Chateau de Sacy)', day: 'Fri 19 to Sat 20 Jun', lat: 49.1825, lng: 3.8483, phase: 'south', type: 'overnight', drive: '4 h 45 min to Lyon (490 km)',
+    popupHeader: '<div class="popup-day">Fri 19 &ndash; Sat 20 June</div><div class="popup-title">Reims &mdash; Chateau de Sacy</div>',
+    popupLodge: '<div class="popup-section"><div class="sec-title lodge">Lodging (Locked)</div><strong>Chateau de Sacy</strong> &mdash; Two rooms. ~&euro;165 to 300/room.<br><a class="popup-link" href="https://www.chateaudesacy-reims.fr/en/" target="_blank">Hotel Website</a></div>' },
+  { id: 'lyon', name: 'Lyon (Fourviere Hotel)', day: 'Sat 20 to Mon 22 Jun', lat: 45.7640, lng: 4.8357, phase: 'south', type: 'overnight', drive: '5 h 15 min to Cannes via Valence (480 km)',
+    popupHeader: '<div class="popup-day">Sat 20 &ndash; Mon 22 June (2 nights)</div><div class="popup-title">Lyon &mdash; Fourviere Hotel</div>',
+    popupLodge: '<div class="popup-section"><div class="sec-title lodge">Lodging (Locked)</div><strong>Fourviere Hotel</strong> &mdash; Two rooms, 2 nights. ~&euro;125 to 164/room/night.<br><a class="popup-link" href="https://www.fourviere-hotel.com/en/" target="_blank">Hotel Website</a></div>',
+    popupExtra: '<div class="popup-section"><div class="sec-title act">Bonus</div>Les Nuits de Fourviere &mdash; Roman amphitheatre performances<br><a class="popup-link" href="https://www.nuitsdefourviere.com/" target="_blank">Programme &amp; Tickets</a></div>' },
+  { id: 'valence', name: 'Valence (Lunch Stop)', day: 'Mon 22 Jun', lat: 44.9334, lng: 4.8924, phase: 'south', type: 'stop',
+    popupHeader: '<div class="popup-day">Mon 22 June (lunch stop)</div><div class="popup-title">Valence</div>' },
+  { id: 'cannes', name: 'Cannes Lions', day: 'Mon 22 to Fri 26 Jun', lat: 43.5528, lng: 7.0174, phase: 'cannes', type: 'cannes',
+    fixedPopup: '<div class="popup-day">Mon 22 &ndash; Fri 26 June</div><div class="popup-title" style="color:#b8860b;font-size:1.3em;">Cannes Lions 2026</div><div class="popup-body">International Festival of Creativity<br>Palais des Festivals et des Congres<br><a class="popup-link" href="https://www.canneslions.com/" target="_blank">Cannes Lions Official</a><a class="popup-link" href="https://maps.google.com/?q=Palais+des+Festivals+Cannes" target="_blank">Directions</a></div>' },
+  { id: 'aix', name: 'Aix en Provence', day: 'Fri 26 to Sat 27 Jun', lat: 43.5297, lng: 5.4474, phase: 'north', type: 'overnight', drive: '4 h 45 min to Beaune (480 km)',
+    popupHeader: '<div class="popup-day">Fri 26 &ndash; Sat 27 June</div><div class="popup-title">Aix en Provence</div>' },
+  { id: 'beaune', name: 'Beaune', day: 'Sat 27 to Sun 28 Jun', lat: 47.0260, lng: 4.8400, phase: 'north', type: 'overnight', drive: '7 h 30 min to Amsterdam (780 km)',
+    popupHeader: '<div class="popup-day">Sat 27 &ndash; Sun 28 June</div><div class="popup-title">Beaune</div>' },
+  { id: 'amsterdam-end', name: 'Amsterdam', day: 'Sun 28 Jun', lat: 52.3676, lng: 4.9041, phase: 'north', type: 'end',
+    fixedPopup: '<div class="popup-day">Sun 28 June</div><div class="popup-title">Amsterdam</div><div class="popup-body">Arrive home ~4 to 5 PM. 7 h 30 min drive from Beaune via A6 / A31 / E25. Comfort stop around Metz.</div>' }
+];
+
+const catLabels = { lodge: 'Lodging', dine: 'Dining', act: 'Activity' };
+const catOrder = ['lodge', 'dine', 'act'];
+
+function getItemsForStop(stopId) {
+  return items.filter(it => it.stop === stopId);
+}
+
+function getActiveVariant(item) {
+  return item[choices[item.id]];
+}
+
+function buildPopup(stop) {
+  if (stop.fixedPopup) return stop.fixedPopup;
+  let html = stop.popupHeader || '';
+  if (stop.popupLodge) html += stop.popupLodge;
+  const stopItems = getItemsForStop(stop.id).filter(it => !it.locked);
+  catOrder.forEach(cat => {
+    const catItems = stopItems.filter(it => it.cat === cat);
+    catItems.forEach(it => {
+      const v = getActiveVariant(it);
+      if (v.popup) {
+        const mode = choices[it.id];
+        const tagColor = mode === 'budget' ? '#4a8c3f' : '#b8860b';
+        const tagLabel = it.same ? '' : ` <span style="background:${tagColor};color:white;font-size:0.68em;padding:1px 5px;border-radius:3px;font-weight:600;">${mode === 'budget' ? 'B' : 'S'}</span>`;
+        html += `<div class="popup-section"><div class="sec-title ${cat}">${catLabels[cat] || ''}${tagLabel}</div>${v.popup}</div>`;
+      }
+    });
+  });
+  if (stop.popupExtra) html += stop.popupExtra;
+  return html;
+}
+
+// MAP
+const southRoute = [[52.3676,4.9041],[50.85,3.6],[49.1825,3.8483],[48.3,4.1],[47.3,4.5],[46.2,4.7],[45.764,4.8357],[44.9334,4.8924],[44.1,5.1],[43.8,5.8],[43.7,6.5],[43.5528,7.0174]];
+const northRoute = [[43.5528,7.0174],[43.5297,5.4474],[43.9,5.0],[44.5,4.9],[45.2,4.8],[45.764,4.8357],[46.2,4.7],[47.026,4.84],[47.8,4.5],[48.5,4.2],[49.1,3.8],[49.8,4.0],[50.4,4.5],[51.2,4.8],[52.3676,4.9041]];
+
+const map = L.map('map', { center: [47.5, 5.0], zoom: 6, zoomControl: false });
+L.control.zoom({ position: 'topright' }).addTo(map);
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+  attribution: '&copy; OpenStreetMap &copy; CARTO', subdomains: 'abcd', maxZoom: 19
+}).addTo(map);
+map.setView([47.5, 6.5], 6);
+
+L.polyline(southRoute, { color: '#b8860b', weight: 3, opacity: 0.7, smoothFactor: 1.5 }).addTo(map);
+L.polyline(northRoute, { color: '#2e5090', weight: 3, opacity: 0.5, dashArray: '8,8', smoothFactor: 1.5 }).addTo(map);
+
+function createIcon(type) {
+  const colors = { start:'#2c2520', end:'#2c2520', overnight:'#b8860b', stop:'#7a6e63', cannes:'#c4a035' };
+  const sizes = { start:12, end:12, overnight:14, stop:10, cannes:18 };
+  const c = colors[type]||'#b8860b', sz = sizes[type]||12;
+  return L.divIcon({ className:'', html:`<div style="width:${sz}px;height:${sz}px;background:${c};border:2.5px solid white;border-radius:50%;box-shadow:0 2px 6px rgba(0,0,0,0.3);"></div>`, iconSize:[sz,sz], iconAnchor:[sz/2,sz/2], popupAnchor:[0,-sz/2-4] });
+}
+
+const markers = {};
+stopMeta.forEach(s => {
+  if (s.id === 'amsterdam-end') { markers[s.id] = markers['amsterdam-start']; return; }
+  const marker = L.marker([s.lat, s.lng], { icon: createIcon(s.type) })
+    .addTo(map).bindPopup(buildPopup(s), { maxWidth: 340, minWidth: 260 });
+  markers[s.id] = marker;
+});
+
+function refreshPopups() {
+  stopMeta.forEach(s => {
+    if (s.id === 'amsterdam-end') return;
+    markers[s.id].setPopupContent(buildPopup(s));
+  });
+}
+
+function flyToStop(stop) {
+  document.querySelectorAll('.stop-header').forEach(c => c.classList.remove('active'));
+  const el = document.getElementById('hdr-' + stop.id);
+  if (el) el.classList.add('active');
+  const tid = stop.id === 'amsterdam-end' ? 'amsterdam-start' : stop.id;
+  map.flyTo([stop.lat, stop.lng], stop.type === 'cannes' ? 12 : 10, { duration: 1 });
+  setTimeout(() => markers[tid].openPopup(), 600);
+}
+
+// BUDGET CALCULATION
+function calcTotal() {
+  let low = 0, high = 0;
+  items.forEach(it => {
+    const v = getActiveVariant(it);
+    low += v.costLow;
+    high += v.costHigh;
+  });
+  return { low, high };
+}
+
+// SIDEBAR BUILD
+function buildSidebar() {
+  const sidebar = document.getElementById('sidebar');
+  sidebar.innerHTML = '';
+  let currentPhase = '';
+
+  stopMeta.forEach(s => {
+    if (s.phase !== currentPhase) {
+      currentPhase = s.phase;
+      const label = document.createElement('div');
+      label.className = 'phase-label';
+      label.textContent = s.phase === 'south' ? 'Southbound to Cannes' : s.phase === 'cannes' ? 'Festival' : 'Northbound to Amsterdam';
+      sidebar.appendChild(label);
+    }
+    const section = document.createElement('div');
+    section.className = 'stop-section';
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.className = 'stop-header';
+    hdr.id = 'hdr-' + s.id;
+    const driveHtml = s.drive ? `<div class="drive-tag">&#x1F697; ${s.drive}</div>` : '';
+    hdr.innerHTML = `<div class="header-left"><div class="day">${s.day}</div><div class="name">${s.name}</div>${driveHtml}</div>`;
+    hdr.addEventListener('click', () => flyToStop(s));
+    section.appendChild(hdr);
+
+    // Items
+    const stopItems = getItemsForStop(s.id);
+    if (stopItems.length > 0) {
+      const list = document.createElement('div');
+      list.className = 'item-list';
+      stopItems.forEach(it => {
+        const v = getActiveVariant(it);
+        const row = document.createElement('div');
+        row.className = 'item-row' + (it.locked ? ' locked' : '');
+
+        const catCls = it.cat === 'transport' ? '' : it.cat;
+        let toggleHtml = '';
+        if (it.locked) {
+          toggleHtml = '<span class="locked-tag">LOCKED</span>';
+        } else if (it.same) {
+          toggleHtml = '<span class="same-tag">Same</span>';
+        } else {
+          const bSel = choices[it.id] === 'budget' ? ' sel-budget' : '';
+          const sSel = choices[it.id] === 'splurge' ? ' sel-splurge' : '';
+          toggleHtml = `<div class="item-toggle"><button class="${bSel}" data-id="${it.id}" data-mode="budget" onclick="toggleItem('${it.id}','budget')">B</button><button class="${sSel}" data-id="${it.id}" data-mode="splurge" onclick="toggleItem('${it.id}','splurge')">S</button></div>`;
+        }
+
+        row.innerHTML = `
+          <div class="item-info">
+            <div class="item-cat ${catCls}">${catLabels[it.cat] || 'Transport'}</div>
+            <div class="item-name">${v.name}</div>
+            <div class="item-price">${v.price}</div>
+          </div>
+          ${toggleHtml}
+        `;
+        list.appendChild(row);
+      });
+      section.appendChild(list);
+    }
+    sidebar.appendChild(section);
+  });
+
+  // Budget panel
+  buildBudgetPanel(sidebar);
+}
+
+function buildBudgetPanel(sidebar) {
+  const total = calcTotal();
+  const panel = document.createElement('div');
+
+  // Build rows grouped by category
+  const cats = [
+    { label: 'Lodging', ids: items.filter(i => i.cat === 'lodge').map(i => i.id) },
+    { label: 'Dining', ids: items.filter(i => i.cat === 'dine').map(i => i.id) },
+    { label: 'Activities', ids: items.filter(i => i.cat === 'act').map(i => i.id) },
+    { label: 'Transport', ids: items.filter(i => i.cat === 'transport').map(i => i.id) }
+  ];
+
+  let rowsHtml = '';
+  cats.forEach(cat => {
+    rowsHtml += `<div class="budget-row cat-row"><span class="label">${cat.label}</span><span class="amount"></span></div>`;
+    cat.ids.forEach(id => {
+      const it = items.find(i => i.id === id);
+      const v = getActiveVariant(it);
+      const mode = choices[it.id];
+      let tag = '';
+      if (!it.locked && !it.same) {
+        tag = mode === 'budget' ? ' <span class="tag-b">B</span>' : ' <span class="tag-s">S</span>';
+      }
+      const amt = v.costLow === v.costHigh ? `\u20AC${v.costLow}` : `\u20AC${v.costLow} to ${v.costHigh}`;
+      rowsHtml += `<div class="budget-row"><span class="label">${v.name}${tag}</span><span class="amount">${amt}</span></div>`;
+    });
+  });
+
+  const totalStr = total.low === total.high ? `\u20AC${total.low.toLocaleString()}` : `\u20AC${total.low.toLocaleString()} to ${total.high.toLocaleString()}`;
+  rowsHtml += `<div class="budget-row total-row"><span class="label">Estimated Total (all in)</span><span class="amount">${totalStr}</span></div>`;
+
+  panel.innerHTML = `
+    <div class="budget-panel">
+      <h3>Your Trip Budget (2 people)</h3>
+      ${rowsHtml}
+      <div class="budget-note">All prices for 2 travellers. Drinks not included. Fuel: ~7 L/100km at ~&euro;1.80/L. Hotel prices approximate.</div>
+    </div>
+  `;
+  sidebar.appendChild(panel);
+}
+
+function toggleItem(id, mode) {
+  choices[id] = mode;
+  buildSidebar();
+  refreshPopups();
+}
+
+function setAllMode(mode) {
+  items.forEach(it => { if (!it.locked && !it.same) choices[it.id] = mode; });
+  document.querySelectorAll('.preset-btn').forEach(b => b.className = 'preset-btn');
+  if (mode === 'budget') document.querySelector('.preset-btn:first-child').classList.add('budget-hl');
+  else document.querySelector('.preset-btn:last-child').classList.add('splurge-hl');
+  buildSidebar();
+  refreshPopups();
+}
+
+// Sidebar toggle
+let sidebarOpen = true;
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  document.getElementById('sidebar').classList.toggle('collapsed');
+  document.getElementById('toggleBtn').classList.toggle('collapsed');
+  document.getElementById('toggleBtn').innerHTML = sidebarOpen ? '&#9664;' : '&#9654;';
+}
+
+// Init
+buildSidebar();
+
+
+// ========== COMMENTING SYSTEM ==========
+const STORAGE_KEY = 'cannes-trip-comments';
+let currentUser = 'jimi';
+
+function loadComments() {
+  try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {}; } catch(e) { return {}; }
+}
+function saveComments(comments) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(comments));
+}
+
+function getStopComments(stopId) {
+  const all = loadComments();
+  return all[stopId] || [];
+}
+
+function addComment(stopId, text) {
+  if (!text.trim()) return;
+  const all = loadComments();
+  if (!all[stopId]) all[stopId] = [];
+  all[stopId].push({
+    author: currentUser,
+    text: text.trim(),
+    time: new Date().toISOString()
+  });
+  saveComments(all);
+  buildCommentsPanel();
+}
+
+function formatTime(iso) {
+  const d = new Date(iso);
+  const day = d.getDate();
+  const mon = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][d.getMonth()];
+  const h = d.getHours().toString().padStart(2,'0');
+  const m = d.getMinutes().toString().padStart(2,'0');
+  return day + ' ' + mon + ' ' + h + ':' + m;
+}
+
+function buildCommentsPanel() {
+  let panel = document.getElementById('comments-panel');
+  if (!panel) {
+    panel = document.createElement('div');
+    panel.id = 'comments-panel';
+    document.getElementById('sidebar').appendChild(panel);
+  }
+
+  const allComments = loadComments();
+  const totalCount = Object.values(allComments).reduce((s, arr) => s + arr.length, 0);
+
+  const commentStops = ['reims', 'lyon', 'valence', 'cannes', 'aix', 'beaune'];
+  const stopNames = {
+    reims: 'Reims', lyon: 'Lyon', valence: 'Valence',
+    cannes: 'Cannes Lions', aix: 'Aix en Provence', beaune: 'Beaune'
+  };
+
+  let html = '<div class="comments-panel">';
+  html += '<h3>Comments <span>' + totalCount + ' total</span></h3>';
+
+  // User selector
+  html += '<div style="padding:10px 16px 4px;">';
+  html += '<div class="user-select">';
+  html += '<button class="user-btn ' + (currentUser==='jimi' ? 'active-jimi' : '') + '" onclick="setUser(\'jimi\')">Jimi</button>';
+  html += '<button class="user-btn ' + (currentUser==='denise' ? 'active-denise' : '') + '" onclick="setUser(\'denise\')">Denise</button>';
+  html += '</div></div>';
+
+  commentStops.forEach(sid => {
+    const comments = allComments[sid] || [];
+    const count = comments.length;
+    html += '<div class="comment-stop-section">';
+    html += '<div class="comment-stop-header" onclick="toggleCommentSection(\''+sid+'\')">';
+    html += '<span>' + stopNames[sid] + '</span>';
+    html += '<span class="count ' + (count === 0 ? 'zero' : '') + '">' + count + '</span>';
+    html += '</div>';
+    html += '<div class="comment-body" id="comments-' + sid + '">';
+
+    comments.forEach(c => {
+      html += '<div class="comment-bubble ' + c.author + '">';
+      html += '<div class="author">' + c.author + '</div>';
+      html += c.text;
+      html += '<div class="time">' + formatTime(c.time) + '</div>';
+      html += '</div>';
+    });
+
+    html += '<div class="comment-form">';
+    html += '<input type="text" id="input-' + sid + '" placeholder="Add a note..." onkeydown="if(event.key===\'Enter\')addComment(\''+sid+'\',this.value)">';
+    html += '<button onclick="addComment(\''+sid+'\',document.getElementById(\'input-'+sid+'\').value)">Post</button>';
+    html += '</div>';
+    html += '</div></div>';
+  });
+
+  html += '</div>';
+  panel.innerHTML = html;
+}
+
+function toggleCommentSection(sid) {
+  const el = document.getElementById('comments-' + sid);
+  if (el) el.classList.toggle('open');
+}
+
+function setUser(u) {
+  currentUser = u;
+  buildCommentsPanel();
+}
+
+// Build comments after sidebar
+setTimeout(buildCommentsPanel, 100);
+
+</script>
+</body>
+</html>
+
